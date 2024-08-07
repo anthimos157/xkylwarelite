@@ -12,52 +12,61 @@ local LP = Players.LocalPlayer
 local Mouse = LP:GetMouse()
 local Camera = Workspace.CurrentCamera
 
--- Configuration
-getgenv().games = {
-    Camlock = {
-        Enable = true,
-        prediction = 0.116869348534243,
-        smoothness = true, -- Enable smoothness
-        smoothnessAmount = 0.2, -- Control smoothing amount (0 to 1)
-        autopred = true,
-        AntiGroundShots = true,
-        Key = Enum.KeyCode.Q,
-        SilentAim = true, -- Enable Silent Aim
+-- Default Configuration
+local defaultConfig = {
+    games = {
+        Camlock = {
+            Enable = true,
+            prediction = 0.116869348534243,
+            smoothness = true,
+            smoothnessAmount = 0.2,
+            autopred = true,
+            AntiGroundShots = true,
+            Key = Enum.KeyCode.Q,
+            SilentAim = true,
+        },
+    },
+    AimParts = { "Head", "HumanoidRootPart" },
+    PredictMovement = true,
+    PredictionVelocity = 10,
+    FOVSettings = {
+        EnableFOV = true,
+        Radius = 100,
+        Color = Color3.fromRGB(0, 255, 0),
+        Transparency = 0.5,
+        OutlineColor = Color3.fromRGB(255, 0, 255),
+        OutlineThickness = 2,
+    },
+    highlightSettings = {
+        EnableHighlight = true,
+        FillColor = Color3.fromRGB(175, 25, 255),
+        GreenColor = Color3.fromRGB(0, 255, 0),
+        DepthMode = "AlwaysOnTop",
+        FillTransparency = 0.5,
+        OutlineColor = Color3.fromRGB(255, 255, 255),
+        OutlineTransparency = 0,
     },
 }
 
-getgenv().AimPart = "HumanoidRootPart" -- Set the aim part to use
-getgenv().PredictMovement = true -- Enable movement prediction
-getgenv().PredictionVelocity = 10 -- Velocity for prediction
+-- Configuration Variables
+local config = defaultConfig
 
--- FOV settings
-getgenv().FOVSettings = {
-    EnableFOV = true, -- Option to enable or disable FOV circle
-    Radius = 100, -- Set the default radius for the FOV
-    Color = Color3.fromRGB(255, 0, 255), -- Purple color for outline
-    Transparency = 0.5, -- Transparency of the FOV circle (not used)
-    OutlineColor = Color3.fromRGB(255, 0, 255), -- Purple color for outline
-    OutlineThickness = 2, -- Thickness of the FOV outline
-}
+-- Function to load configuration
+local function loadConfiguration(cfg)
+    if type(cfg) == "table" then
+        for key, value in pairs(cfg) do
+            if type(value) == "table" and type(config[key]) == "table" then
+                loadConfiguration(value)
+            else
+                config[key] = value
+            end
+        end
+    end
+end
 
--- Highlight settings
-getgenv().highlightSettings = {
-    EnableHighlight = true, -- Option to enable or disable highlights
-    FillColor = Color3.fromRGB(175, 25, 255), -- Default color
-    GreenColor = Color3.fromRGB(0, 255, 0), -- Green color
-    DepthMode = "AlwaysOnTop",
-    FillTransparency = 0.5,
-    OutlineColor = Color3.fromRGB(255, 255, 255),
-    OutlineTransparency = 0,
-}
-
-local Storage = Instance.new("Folder")
-Storage.Parent = CoreGui
-Storage.Name = "Highlight_Storage"
-
-local AimlockTarget = nil
-local connections = {}
-local isHighlighted = false
+-- Example usage of loadConfiguration (for testing purposes)
+-- Uncomment this line and replace `exampleConfig` with your configuration table
+-- loadConfiguration(exampleConfig)
 
 -- Function to send notifications
 local function sendNotification(title, text, duration, imageUrl)
@@ -83,7 +92,7 @@ local function getClosestPlayerToCursor()
     local closestDist = math.huge
     local closestPlr = nil
     local circleCenter = Vector2.new(UserInputService:GetMouseLocation().X, UserInputService:GetMouseLocation().Y)
-    local fovRadius = getgenv().FOVSettings.Radius
+    local fovRadius = config.FOVSettings.Radius
     
     for _, v in ipairs(Players:GetPlayers()) do
         if v ~= LP and v.Character and v.Character:FindFirstChild("Humanoid") and v.Character.Humanoid.Health > 0 then
@@ -110,8 +119,8 @@ local function getPlayerAvatarUrl(player)
 end
 
 local function Highlight(plr)
-    if not getgenv().highlightSettings.EnableHighlight then
-        return -- Skip highlighting if not enabled
+    if not config.highlightSettings.EnableHighlight then
+        return
     end
     
     if Storage:FindFirstChild(AimlockTarget and AimlockTarget.Name) then
@@ -120,11 +129,11 @@ local function Highlight(plr)
 
     local Highlight = Instance.new("Highlight")
     Highlight.Name = plr.Name
-    Highlight.FillColor = getgenv().highlightSettings.FillColor
-    Highlight.DepthMode = getgenv().highlightSettings.DepthMode
-    Highlight.FillTransparency = getgenv().highlightSettings.FillTransparency
-    Highlight.OutlineColor = getgenv().highlightSettings.OutlineColor
-    Highlight.OutlineTransparency = getgenv().highlightSettings.OutlineTransparency
+    Highlight.FillColor = config.highlightSettings.FillColor
+    Highlight.DepthMode = config.highlightSettings.DepthMode
+    Highlight.FillTransparency = config.highlightSettings.FillTransparency
+    Highlight.OutlineColor = config.highlightSettings.OutlineColor
+    Highlight.OutlineTransparency = config.highlightSettings.OutlineTransparency
     Highlight.Parent = Storage
     
     local plrchar = plr.Character
@@ -149,20 +158,20 @@ end
 
 -- Update prediction based on ping
 local function updatePrediction()
-    if getgenv().games.Camlock.autopred then
+    if config.games.Camlock.autopred then
         local ping = tonumber(Stats.Network.ServerStatsItem["Data Ping"]:GetValueString():match("(%d+%.?%d*)"))
         if ping < 30 then
-            getgenv().games.Camlock.prediction = 0.11252476
+            config.games.Camlock.prediction = 0.11252476
         elseif ping < 50 then
-            getgenv().games.Camlock.prediction = 0.13544
+            config.games.Camlock.prediction = 0.13544
         elseif ping < 65 then
-            getgenv().games.Camlock.prediction = 0.1264236
+            config.games.Camlock.prediction = 0.1264236
         elseif ping < 70 then
-            getgenv().games.Camlock.prediction = 0.12533
+            config.games.Camlock.prediction = 0.12533
         elseif ping < 80 then
-            getgenv().games.Camlock.prediction = 0.13934
+            config.games.Camlock.prediction = 0.13934
         elseif ping < 100 then
-            getgenv().games.Camlock.prediction = 0.116869348534243
+            config.games.Camlock.prediction = 0.116869348534243
         end
     end
 end
@@ -196,12 +205,12 @@ end)
 
 -- Create FOV Circle
 local FOVCircle = Instance.new("Frame")
-FOVCircle.Size = UDim2.new(0, getgenv().FOVSettings.Radius * 2, 0, getgenv().FOVSettings.Radius * 2)
+FOVCircle.Size = UDim2.new(0, config.FOVSettings.Radius * 2, 0, config.FOVSettings.Radius * 2)
 FOVCircle.Position = UDim2.new(0, 0, 0, 0)
 FOVCircle.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Set to black as fill is not used
 FOVCircle.BackgroundTransparency = 1 -- No fill
-FOVCircle.BorderSizePixel = getgenv().FOVSettings.OutlineThickness
-FOVCircle.BorderColor3 = getgenv().FOVSettings.OutlineColor
+FOVCircle.BorderSizePixel = config.FOVSettings.OutlineThickness
+FOVCircle.BorderColor3 = config.FOVSettings.OutlineColor
 FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
 FOVCircle.Parent = ScreenGui
 
@@ -212,9 +221,9 @@ UICorner.Parent = FOVCircle
 
 -- Update FOV Circle Position
 RunService.RenderStepped:Connect(function()
-    if getgenv().FOVSettings.EnableFOV then
+    if config.FOVSettings.EnableFOV then
         local mousePosition = UserInputService:GetMouseLocation()
-        FOVCircle.Position = UDim2.new(0, mousePosition.X, 0, mousePosition.Y)
+        FOVCircle.Position = UDim2.new(0, mousePosition.X - FOVCircle.Size.X.Offset / 2, 0, mousePosition.Y - FOVCircle.Size.Y.Offset / 2)
         FOVCircle.Visible = true
     else
         FOVCircle.Visible = false
@@ -223,7 +232,7 @@ end)
 
 -- Key press event handler for toggling highlight and aimlock
 local function OnKeyPress(input, gameProcessedEvent)
-    if input.KeyCode == getgenv().games.Camlock.Key and not gameProcessedEvent then
+    if input.KeyCode == config.games.Camlock.Key and not gameProcessedEvent then
         if isHighlighted then
             -- Remove the highlight and unlock
             if AimlockTarget then
@@ -242,7 +251,9 @@ local function OnKeyPress(input, gameProcessedEvent)
                 local avatarUrl = getPlayerAvatarUrl(Plr)
                 sendNotification("xyklware", "Locked onto: " .. Plr.Name, 5, avatarUrl)
             else
-                sendNotification("xyklware", "No player found to lock onto", 3)
+                -- No notification for no player found
+                -- Uncomment the following line if you want to notify when no player is found:
+                -- sendNotification("No Target Found", "No player within FOV.", 2)
             end
         end
     end
@@ -263,22 +274,39 @@ end)
 RunService.RenderStepped:Connect(function()
     updatePrediction()
 
-    if AimlockTarget and AimlockTarget.Character and AimlockTarget.Character:FindFirstChild(getgenv().AimPart) then
+    if AimlockTarget and AimlockTarget.Character then
         local aimPosition
-
-        -- Determine the aim position based on movement prediction
-        if getgenv().PredictMovement then
-            aimPosition = AimlockTarget.Character[getgenv().AimPart].Position + (AimlockTarget.Character[getgenv().AimPart].Velocity / getgenv().PredictionVelocity)
-        else
-            aimPosition = AimlockTarget.Character[getgenv().AimPart].Position
+        local aimPartFound = false
+        
+        -- Check all aim parts
+        for _, partName in ipairs(config.AimParts) do
+            local aimPart = AimlockTarget.Character:FindFirstChild(partName)
+            if aimPart then
+                aimPartFound = true
+                -- Determine the aim position based on movement prediction
+                if config.PredictMovement then
+                    aimPosition = aimPart.Position + (aimPart.Velocity / config.PredictionVelocity)
+                else
+                    aimPosition = aimPart.Position
+                end
+                
+                -- Apply smoothness logic
+                if config.games.Camlock.smoothness then
+                    local targetCFrame = CFrame.new(Camera.CFrame.p, aimPosition)
+                    Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, config.games.Camlock.smoothnessAmount)
+                else
+                    Camera.CFrame = CFrame.new(Camera.CFrame.p, aimPosition)
+                end
+                break -- Use the first valid aim part found
+            end
         end
-
-        -- Apply smoothness logic
-        if getgenv().games.Camlock.smoothness then
-            local targetCFrame = CFrame.new(Camera.CFrame.p, aimPosition)
-            Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, getgenv().games.Camlock.smoothnessAmount)
-        else
-            Camera.CFrame = CFrame.new(Camera.CFrame.p, aimPosition)
+        
+        -- If no aim part was found, reset the target
+        if not aimPartFound then
+            AimlockTarget = nil
+            isHighlighted = false
+            -- Uncomment the following line if you want to notify when no aim part is found:
+            -- sendNotification("Aim Part Not Found", "No valid aim part on the target.", 2)
         end
     end
 end)
