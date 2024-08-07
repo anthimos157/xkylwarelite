@@ -1,0 +1,284 @@
+-- Services
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local StarterGui = game:GetService("StarterGui")
+local CoreGui = game:GetService("CoreGui")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local Stats = game:GetService("Stats")
+
+-- LocalPlayer
+local LP = Players.LocalPlayer
+local Mouse = LP:GetMouse()
+local Camera = Workspace.CurrentCamera
+
+-- Configuration
+getgenv().games = {
+    Camlock = {
+        Enable = true,
+        prediction = 0.116869348534243,
+        smoothness = true, -- Enable smoothness
+        smoothnessAmount = 0.2, -- Control smoothing amount (0 to 1)
+        autopred = true,
+        AntiGroundShots = true,
+        Key = Enum.KeyCode.Q,
+        SilentAim = true, -- Enable Silent Aim
+    },
+}
+
+getgenv().AimPart = "HumanoidRootPart" -- Set the aim part to use
+getgenv().PredictMovement = true -- Enable movement prediction
+getgenv().PredictionVelocity = 10 -- Velocity for prediction
+
+-- FOV settings
+getgenv().FOVSettings = {
+    EnableFOV = true, -- Option to enable or disable FOV circle
+    Radius = 100, -- Set the default radius for the FOV
+    Color = Color3.fromRGB(255, 0, 255), -- Purple color for outline
+    Transparency = 0.5, -- Transparency of the FOV circle (not used)
+    OutlineColor = Color3.fromRGB(255, 0, 255), -- Purple color for outline
+    OutlineThickness = 2, -- Thickness of the FOV outline
+}
+
+-- Highlight settings
+getgenv().highlightSettings = {
+    EnableHighlight = true, -- Option to enable or disable highlights
+    FillColor = Color3.fromRGB(175, 25, 255), -- Default color
+    GreenColor = Color3.fromRGB(0, 255, 0), -- Green color
+    DepthMode = "AlwaysOnTop",
+    FillTransparency = 0.5,
+    OutlineColor = Color3.fromRGB(255, 255, 255),
+    OutlineTransparency = 0,
+}
+
+local Storage = Instance.new("Folder")
+Storage.Parent = CoreGui
+Storage.Name = "Highlight_Storage"
+
+local AimlockTarget = nil
+local connections = {}
+local isHighlighted = false
+
+-- Function to send notifications
+local function sendNotification(title, text, duration, imageUrl)
+    StarterGui:SetCore("SendNotification", {
+        Title = title,
+        Text = text,
+        Duration = duration or 5,
+        Icon = imageUrl
+    })
+end
+
+-- Display notification on script load
+sendNotification("xyklware cracked by bankai", "Successfully Loaded xyklware", 5)
+
+-- Function to check if a position is within the FOV circle
+local function isWithinFovCircle(playerScreenPos, circlePos, radius)
+    local distance = (playerScreenPos - circlePos).Magnitude
+    return distance <= radius
+end
+
+-- Function to get the closest player to the cursor
+local function getClosestPlayerToCursor()
+    local closestDist = math.huge
+    local closestPlr = nil
+    local circleCenter = Vector2.new(UserInputService:GetMouseLocation().X, UserInputService:GetMouseLocation().Y)
+    local fovRadius = getgenv().FOVSettings.Radius
+    
+    for _, v in ipairs(Players:GetPlayers()) do
+        if v ~= LP and v.Character and v.Character:FindFirstChild("Humanoid") and v.Character.Humanoid.Health > 0 then
+            local screenPos, cameraVisible = Camera:WorldToViewportPoint(v.Character.HumanoidRootPart.Position)
+            if cameraVisible and isWithinFovCircle(Vector2.new(screenPos.X, screenPos.Y), circleCenter, fovRadius) then
+                local distToMouse = (circleCenter - Vector2.new(screenPos.X, screenPos.Y)).Magnitude
+                if distToMouse < closestDist then
+                    closestPlr = v
+                    closestDist = distToMouse
+                end
+            end
+        end
+    end
+    return closestPlr
+end
+
+-- Function to get player avatar URL
+local function getPlayerAvatarUrl(player)
+    local userId = player.UserId
+    local success, url = pcall(function()
+        return Players:GetUserThumbnailAsync(userId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size180x180)
+    end)
+    return success and url or nil
+end
+
+local function Highlight(plr)
+    if not getgenv().highlightSettings.EnableHighlight then
+        return -- Skip highlighting if not enabled
+    end
+    
+    if Storage:FindFirstChild(AimlockTarget and AimlockTarget.Name) then
+        Unhighlight(AimlockTarget)
+    end
+
+    local Highlight = Instance.new("Highlight")
+    Highlight.Name = plr.Name
+    Highlight.FillColor = getgenv().highlightSettings.FillColor
+    Highlight.DepthMode = getgenv().highlightSettings.DepthMode
+    Highlight.FillTransparency = getgenv().highlightSettings.FillTransparency
+    Highlight.OutlineColor = getgenv().highlightSettings.OutlineColor
+    Highlight.OutlineTransparency = getgenv().highlightSettings.OutlineTransparency
+    Highlight.Parent = Storage
+    
+    local plrchar = plr.Character
+    if plrchar then
+        Highlight.Adornee = plrchar
+    end
+
+    connections[plr] = plr.CharacterAdded:Connect(function(char)
+        Highlight.Adornee = char
+    end)
+end
+
+local function Unhighlight(plr)
+    local plrname = plr.Name
+    if Storage:FindFirstChild(plrname) then
+        Storage[plrname]:Destroy()
+    end
+    if connections[plr] then
+        connections[plr]:Disconnect()
+    end
+end
+
+-- Update prediction based on ping
+local function updatePrediction()
+    if getgenv().games.Camlock.autopred then
+        local ping = tonumber(Stats.Network.ServerStatsItem["Data Ping"]:GetValueString():match("(%d+%.?%d*)"))
+        if ping < 30 then
+            getgenv().games.Camlock.prediction = 0.11252476
+        elseif ping < 50 then
+            getgenv().games.Camlock.prediction = 0.13544
+        elseif ping < 65 then
+            getgenv().games.Camlock.prediction = 0.1264236
+        elseif ping < 70 then
+            getgenv().games.Camlock.prediction = 0.12533
+        elseif ping < 80 then
+            getgenv().games.Camlock.prediction = 0.13934
+        elseif ping < 100 then
+            getgenv().games.Camlock.prediction = 0.116869348534243
+        end
+    end
+end
+
+-- FPS Display UI
+local ScreenGui = Instance.new("ScreenGui", CoreGui)
+local TextLabel = Instance.new("TextLabel", ScreenGui)
+
+TextLabel.Text = "xyklware cracked by bankai | User: " .. LP.Name
+TextLabel.Size = UDim2.new(0, 600, 0, 50)
+TextLabel.Position = UDim2.new(0.5, -300, 0, 10)
+TextLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+TextLabel.BackgroundTransparency = 1
+TextLabel.TextSize = 24
+TextLabel.Font = Enum.Font.SourceSansBold
+TextLabel.TextXAlignment = Enum.TextXAlignment.Center
+
+local fps = 0
+local frames = 0
+local lastTick = tick()
+
+RunService.RenderStepped:Connect(function()
+    frames = frames + 1
+    if tick() - lastTick >= 1 then
+        fps = frames
+        frames = 0
+        lastTick = tick()
+    end
+    TextLabel.Text = string.format("xyklware cracked by bankai | User: %s | FPS: %d", LP.Name, fps)
+end)
+
+-- Create FOV Circle
+local FOVCircle = Instance.new("Frame")
+FOVCircle.Size = UDim2.new(0, getgenv().FOVSettings.Radius * 2, 0, getgenv().FOVSettings.Radius * 2)
+FOVCircle.Position = UDim2.new(0, 0, 0, 0)
+FOVCircle.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Set to black as fill is not used
+FOVCircle.BackgroundTransparency = 1 -- No fill
+FOVCircle.BorderSizePixel = getgenv().FOVSettings.OutlineThickness
+FOVCircle.BorderColor3 = getgenv().FOVSettings.OutlineColor
+FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+FOVCircle.Parent = ScreenGui
+
+-- Add a UICorner to make the frame circular
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0.5, 0)
+UICorner.Parent = FOVCircle
+
+-- Update FOV Circle Position
+RunService.RenderStepped:Connect(function()
+    if getgenv().FOVSettings.EnableFOV then
+        local mousePosition = UserInputService:GetMouseLocation()
+        FOVCircle.Position = UDim2.new(0, mousePosition.X, 0, mousePosition.Y)
+        FOVCircle.Visible = true
+    else
+        FOVCircle.Visible = false
+    end
+end)
+
+-- Key press event handler for toggling highlight and aimlock
+local function OnKeyPress(input, gameProcessedEvent)
+    if input.KeyCode == getgenv().games.Camlock.Key and not gameProcessedEvent then
+        if isHighlighted then
+            -- Remove the highlight and unlock
+            if AimlockTarget then
+                Unhighlight(AimlockTarget)
+                AimlockTarget = nil
+            end
+            isHighlighted = false
+            sendNotification("xyklware", "Highlight and Aimlock removed", 3)
+        else
+            -- Lock onto the closest player and highlight
+            local Plr = getClosestPlayerToCursor()
+            if Plr then
+                AimlockTarget = Plr
+                Highlight(Plr)
+                isHighlighted = true
+                local avatarUrl = getPlayerAvatarUrl(Plr)
+                sendNotification("xyklware", "Locked onto: " .. Plr.Name, 5, avatarUrl)
+            else
+                sendNotification("xyklware", "No player found to lock onto", 3)
+            end
+        end
+    end
+end
+
+UserInputService.InputBegan:Connect(OnKeyPress)
+
+-- Reset highlight when player character is added
+Players.LocalPlayer.CharacterAdded:Connect(function()
+    for _, plr in ipairs(Players:GetPlayers()) do
+        Unhighlight(plr)
+    end
+    AimlockTarget = nil
+    isHighlighted = false
+end)
+
+-- Camera Lock Functionality
+RunService.RenderStepped:Connect(function()
+    updatePrediction()
+
+    if AimlockTarget and AimlockTarget.Character and AimlockTarget.Character:FindFirstChild(getgenv().AimPart) then
+        local aimPosition
+
+        -- Determine the aim position based on movement prediction
+        if getgenv().PredictMovement then
+            aimPosition = AimlockTarget.Character[getgenv().AimPart].Position + (AimlockTarget.Character[getgenv().AimPart].Velocity / getgenv().PredictionVelocity)
+        else
+            aimPosition = AimlockTarget.Character[getgenv().AimPart].Position
+        end
+
+        -- Apply smoothness logic
+        if getgenv().games.Camlock.smoothness then
+            local targetCFrame = CFrame.new(Camera.CFrame.p, aimPosition)
+            Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, getgenv().games.Camlock.smoothnessAmount)
+        else
+            Camera.CFrame = CFrame.new(Camera.CFrame.p, aimPosition)
+        end
+    end
+end)
